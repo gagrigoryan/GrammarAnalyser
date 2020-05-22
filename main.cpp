@@ -7,12 +7,7 @@ using namespace std;
 
 int main() {
     Grammar g = Grammar();
-    g.loadGrammar(ifstream("C:/Users/gorgr/Desktop/ProgUniver/Grammar/grammar.txt"));
-//    g.printFIRST(cout);
-//    cout << endl << endl;
-//    g.printFOLLOW(cout);
-
-    g.printSATable();
+    g.loadGrammar(ifstream("D:/univer/ProgUniver/Grammar/grammar.txt"));
 
     return 0;
 }

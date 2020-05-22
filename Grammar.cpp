@@ -115,9 +115,7 @@ bool Grammar::loadGrammar(ifstream stream) {
         return false;
     string s;
     for(getline(stream, s); !stream.eof(); getline(stream, s)) {
-        istringstream iss(s);
-        vector<string> results((istream_iterator<string>(iss)),
-                               istream_iterator<string>());
+        vector<string> results = split(s);
         string left = results[0];
         results.erase(results.begin(), results.begin()+2);
         auto rule = grammar.find(left);
@@ -190,27 +188,31 @@ set<string> Grammar::FOLLOW(const string & nonTerminal) {
 }
 
 bool Grammar::buildSATable() {
+    initSA_Reverse_words();
     for (auto & rule : grammar) {
         for (auto & right : rule.second) {
+            unsigned int index_word = indexSA_Reverse_words(right);
             auto firstRight = FIRST(right);
             for (auto & terminal : firstRight) {
                 if (grammar.count(terminal) <= 0 && terminal != "e") {
                     if (SATable[rule.first].count(terminal) > 0)
                         return false;
-                    SATable[rule.first][terminal] = "R1, R";
+                    string R_value = "R " + to_string(index_word + 1) + " R";
+                    SATable[rule.first][terminal] = R_value;
                 }
             }
             if (firstRight.find("e") != firstRight.end()) {
                 auto followRight = FOLLOW(rule.first);
                 for (auto & symbol : followRight) {
-                    SATable[rule.first][symbol] = "R1,R";
+                    string R_value = "R " + to_string(index_word + 1) + " R";
+                    SATable[rule.first][symbol] = R_value;
                 }
             }
         }
     }
     for (auto & term : FIRSTForG) {
         if (grammar.count(term.first) <= 0) {
-            SATable[term.first][term.first] = "P,A";
+            SATable[term.first][term.first] = "P A";
         }
     }
     SATable["$"]["$"] = "Accept";
@@ -218,12 +220,97 @@ bool Grammar::buildSATable() {
     return true;
 }
 
+bool Grammar::parse(string expr) {
+    vector<string> terminals = split(expr);
+    vector<string> stack {"E"};
+    int i = 0;
+    while (!stack.empty()) {
+        if (i >= terminals.size()) {
+            terminals.emplace_back("$");
+        }
+        while (i < terminals.size()) {
+            if (SATable[stack.back()].count(terminals[i]) <= 0) {
+                //cout << "Error: " << stack.back() << ": " << terminals[i] << endl;
+                return false;
+            }
+            string res = SATable[stack.back()][terminals[i]];
+            vector<string> commands = split(res);
+            if (commands[0] == "P") {
+                stack.pop_back();
+            }
+            else if (commands[0] == "R") {
+                string nonTerm = stack.back();
+                stack.pop_back();
+                int index = stoi(commands[1]);
+                vector<string> symbols = split(SA_ReverseWords[index - 1]);
+                if (!(symbols.size() == 1 && symbols[0] == "e")) {
+                    for (auto & sym : symbols) {
+                        stack.emplace_back(sym);
+                    }
+                }
+            } else if (commands[0] == "Accept") {
+                return true;
+            }
+            if (commands.back() == "A")
+                ++i;
+            if (stack.empty())
+                break;
+
+//            cout << "stack:  ";
+//            for (auto & s : stack)
+//                cout << s << " ";
+//            cout << endl;
+        }
+    }
+
+    return true;
+}
+
+void Grammar::initSA_Reverse_words() {
+    for (auto & rule : grammar) {
+        for (auto & right : rule.second) {
+            string reverse_word = accumulate(right.rbegin() + 1, right.rend(), right.back(),
+                    [](string s0, string const& s1) { return s0 += " " + s1; });
+            SA_ReverseWords.emplace_back(reverse_word);
+        }
+    }
+}
+
+unsigned int Grammar::indexSA_Reverse_words(vector<string> & word) {
+    string reverse_word = accumulate(word.rbegin() + 1, word.rend(), word.back(),
+                                     [](string s0, string const& s1) { return s0 += " " + s1; });
+    auto word_it = find(SA_ReverseWords.begin(), SA_ReverseWords.end(), reverse_word);
+    return distance(SA_ReverseWords.begin(), word_it);
+}
+
 void Grammar::printSATable() {
     for (auto & term : SATable) {
         cout << term.first << " =   ";
         for (auto & a : term.second) {
-            cout << "[ " << a.first << " - " << a.second << " ]";
+            cout << "{ '" << a.first << "': " << a.second << " }  ";
         }
         cout << endl;
     }
+}
+
+void Grammar::printSAWords() {
+    for (int i = 0; i < SA_ReverseWords.size(); ++i) {
+        cout << i + 1 << ": " << SA_ReverseWords[i] << endl;
+    }
+}
+
+
+vector<string> split(string & s) {
+    istringstream iss(s);
+    vector<string> result((istream_iterator<string>(iss)),
+                             istream_iterator<string>());
+    return result;
+}
+
+ostream & operator << (ostream &stream, const set<string> &terminals) {
+    stream << "[ ";
+    for (auto & el : terminals)
+        stream << el << " ";
+    stream << " ]";
+    return stream;
 }
